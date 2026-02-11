@@ -24,6 +24,7 @@ def generate_markdown_report(data):
     md = []
     result = data.get('siteResult') if data.get('mode') == 'site' else data.get('result')
     optimization = data.get('siteOptimization') if data.get('mode') == 'site' else data.get('optimization')
+    persona = data.get('personaAnalysis')
     optimization_summary = optimization.get('summary', {}) if optimization else {}
     critical_count = optimization_summary.get('critical', 0)
     warning_count = optimization_summary.get('warnings', 0)
@@ -86,6 +87,32 @@ def generate_markdown_report(data):
             md.append("⚠️ **中等置信度** - 部分信号一致，但存在缺失或冲突。\n")
         else:
             md.append("🔴 **低置信度** - 这通常表明网站是全球化站点，缺乏明确的地区信号。对于跨境电商来说这是正常的。\n")
+
+    # Persona analysis
+    if persona:
+        audience = persona.get('audience', {})
+        regional_persona = persona.get('regionalPersona', {})
+        persona_fit = persona.get('personaFit', {})
+        md.append("\n## 👥 Persona 匹配分析\n")
+        md.append(f"- **目标人群来源**: {audience.get('source', 'N/A')}\n")
+        md.append(f"- **最终目标人群**: {audience.get('finalAudience', 'N/A')}\n")
+        md.append(f"- **区域 Persona**: {regional_persona.get('personaLabel', 'N/A')}\n")
+        md.append(f"- **匹配分数**: {persona_fit.get('score', 'N/A')}/10\n")
+        md.append(f"- **匹配结论**: {'✅ 匹配' if persona_fit.get('isFit') else '⚠️ 存在差距'}\n")
+        if persona_fit.get('summary'):
+            md.append(f"- **结论说明**: {persona_fit.get('summary')}\n")
+
+        traits = _dedupe_keep_order(regional_persona.get('traits', []))
+        if traits:
+            md.append(f"- **人群特征**: {', '.join(traits[:5])}\n")
+
+        matching_signals = _dedupe_keep_order(persona_fit.get('matchingSignals', []))
+        if matching_signals:
+            md.append(f"- **匹配信号**: {', '.join(matching_signals[:3])}\n")
+
+        mismatch_signals = _dedupe_keep_order(persona_fit.get('mismatchSignals', []))
+        if mismatch_signals:
+            md.append(f"- **不匹配信号**: {', '.join(mismatch_signals[:3])}\n")
 
     # Evidence Analysis
     if data.get('mode') == 'site':

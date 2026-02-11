@@ -136,6 +136,28 @@ AI 分析会在输出中添加 `aiContentAnalysis` 字段：
 }
 ```
 
+同时会输出 `personaAnalysis`（用户输入优先，否则自动推断目标人群）：
+
+```json
+{
+  "personaAnalysis": {
+    "audience": {
+      "source": "user_input",
+      "finalAudience": "北美 25-35 岁女性快时尚用户"
+    },
+    "regionalPersona": {
+      "personaLabel": "US price-sensitive mobile-first fashion shopper",
+      "traits": ["Price-sensitive", "Mobile-first", "Trend-driven"]
+    },
+    "personaFit": {
+      "score": 7.6,
+      "isFit": true,
+      "summary": "网站整体较符合该人群预期。"
+    }
+  }
+}
+```
+
 ### AI 分析评估维度
 
 1. **语言质量** (1-10 分)

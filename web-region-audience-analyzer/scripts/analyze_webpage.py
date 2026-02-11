@@ -1432,6 +1432,178 @@ def _call_ai_api(messages, api_base, api_key, model='gpt-4o',
         return {'error': str(e)}
 
 
+def resolve_target_audience(user_input, result, ai_analysis=None):
+    """Resolve final target audience with priority: user input > AI > rule-based."""
+    normalized_user_input = (user_input or '').strip()
+    if normalized_user_input:
+        return {
+            'source': 'user_input',
+            'userInput': normalized_user_input,
+            'inferredAudience': None,
+            'finalAudience': normalized_user_input,
+        }
+
+    inferred = None
+    if isinstance(ai_analysis, dict):
+        ta = ai_analysis.get('targetAudience', {})
+        inferred = ta.get('finalAudience') or ta.get('inferredAudience')
+        if not inferred:
+            inferred = ai_analysis.get('inferredAudience')
+        if isinstance(inferred, str):
+            inferred = inferred.strip() or None
+        else:
+            inferred = None
+
+    if inferred:
+        return {
+            'source': 'ai_inferred',
+            'userInput': None,
+            'inferredAudience': inferred,
+            'finalAudience': inferred,
+        }
+
+    likely = None
+    if isinstance(result, dict):
+        likely = result.get('likelyAudience')
+        if isinstance(likely, str):
+            likely = likely.strip() or None
+        else:
+            likely = None
+
+    if likely:
+        return {
+            'source': 'rule_based',
+            'userInput': None,
+            'inferredAudience': likely,
+            'finalAudience': likely,
+        }
+
+    return {
+        'source': 'rule_based',
+        'userInput': None,
+        'inferredAudience': 'Unknown audience',
+        'finalAudience': 'Unknown audience',
+    }
+
+
+def build_fallback_persona_analysis(result, evidence, target_audience=None):
+    """Build deterministic persona analysis when AI analysis is unavailable."""
+    result = result or {}
+    evidence = evidence or {}
+    audience = resolve_target_audience(target_audience, result, ai_analysis=None)
+
+    region_code = result.get('primaryRegion') or 'N/A'
+    region_name = result.get('primaryRegionName') or 'Unknown'
+    language_name = result.get('primaryLanguageName') or 'Unknown'
+
+    confidence = result.get('regionConfidence', 0.0) or 0.0
+    base_score = max(0.0, min(10.0, round(float(confidence) * 10, 1)))
+
+    html_signals = evidence.get('htmlSignals', {})
+    content_signals = evidence.get('contentSignals', {})
+
+    matching_signals = []
+    mismatch_signals = []
+
+    if html_signals.get('lang'):
+        matching_signals.append(f"声明了页面语言：{html_signals.get('lang')}")
+        base_score += 0.4
+    else:
+        mismatch_signals.append("未声明 <html lang>，语言定位不够清晰")
+
+    currencies = content_signals.get('currencySymbols', []) + content_signals.get('currencyCodes', [])
+    if currencies:
+        dedup_currencies = list(dict.fromkeys(currencies))
+        matching_signals.append(f"检测到货币信号：{', '.join(dedup_currencies[:3])}")
+        base_score += 0.6
+
+    hreflangs = html_signals.get('hreflangTags', [])
+    if hreflangs:
+        matching_signals.append("存在 hreflang 标签，支持多地区人群识别")
+        base_score += 0.4
+    else:
+        mismatch_signals.append("缺少 hreflang 标签，多地区人群覆盖信息不足")
+
+    if not content_signals.get('paymentMethods'):
+        mismatch_signals.append("页面未呈现明显的本地化支付方式信号")
+    else:
+        matching_signals.append("检测到本地支付方式信号")
+        base_score += 0.3
+
+    final_score = max(0.0, min(10.0, round(base_score, 1)))
+
+    persona = {
+        'regionCode': region_code,
+        'regionName': region_name,
+        'language': language_name,
+        'personaLabel': f"{region_name} {audience.get('finalAudience', 'target audience')}",
+        'traits': [
+            '关注价格和价值比',
+            '偏好清晰的配送与退换货信息',
+            '倾向于移动端快速决策',
+        ],
+        'motivations': [
+            '获得与本地区匹配的商品和文案',
+            '降低支付和履约不确定性',
+        ],
+        'painPoints': [
+            '语言/货币信息不一致导致决策成本高',
+            '本地化信任要素不足（评价、保障、支付）',
+        ],
+        'purchaseDrivers': [
+            '价格透明',
+            '本地支付方式',
+            '快速物流和明确售后',
+        ],
+    }
+
+    summary = (
+        "网站与该人群匹配度较好。"
+        if final_score >= 7
+        else "网站与该人群存在部分匹配缺口，建议优先修复本地化关键要素。"
+    )
+
+    return {
+        'audience': audience,
+        'regionalPersona': persona,
+        'personaFit': {
+            'score': final_score,
+            'isFit': final_score >= 7,
+            'matchingSignals': matching_signals[:10],
+            'mismatchSignals': mismatch_signals[:10],
+            'summary': summary,
+        },
+    }
+
+
+def compose_persona_analysis(result, evidence, target_audience=None, ai_analysis=None):
+    fallback = build_fallback_persona_analysis(result, evidence, target_audience=target_audience)
+
+    if not isinstance(ai_analysis, dict) or 'error' in ai_analysis:
+        return fallback
+
+    audience = resolve_target_audience(target_audience, result, ai_analysis=ai_analysis)
+    regional_persona = ai_analysis.get('regionalPersona')
+    persona_fit = ai_analysis.get('personaFit')
+
+    if not isinstance(regional_persona, dict):
+        regional_persona = fallback['regionalPersona']
+    if not isinstance(persona_fit, dict):
+        persona_fit = fallback['personaFit']
+
+    return {
+        'audience': audience,
+        'regionalPersona': regional_persona,
+        'personaFit': {
+            'score': persona_fit.get('score', fallback['personaFit'].get('score')),
+            'isFit': persona_fit.get('isFit', fallback['personaFit'].get('isFit')),
+            'matchingSignals': persona_fit.get('matchingSignals', fallback['personaFit'].get('matchingSignals', [])),
+            'mismatchSignals': persona_fit.get('mismatchSignals', fallback['personaFit'].get('mismatchSignals', [])),
+            'summary': persona_fit.get('summary', fallback['personaFit'].get('summary')),
+        },
+    }
+
+
 AI_CONTENT_ANALYSIS_PROMPT = """\
 You are an expert in cross-border e-commerce localization and multilingual content quality analysis.
 
@@ -1442,6 +1614,7 @@ Analyze the following web page content and provide a structured assessment.
 - **Detected Region**: {region} ({region_name})
 - **Detected Language**: {language} ({language_name})
 - **Region Confidence**: {confidence}
+- **User-Provided Target Audience**: {target_audience}
 
 ## Page Content (truncated to first 3000 chars):
 ```
@@ -1453,6 +1626,27 @@ Analyze the following web page content and provide a structured assessment.
 Analyze the content and return a JSON object with EXACTLY this structure:
 
 {{
+  "targetAudience": {{
+    "inferredAudience": "Who this website appears to target based on content and value proposition",
+    "finalAudience": "Use user-provided target audience if present, otherwise use inferredAudience"
+  }},
+  "regionalPersona": {{
+    "regionCode": "{region}",
+    "regionName": "{region_name}",
+    "language": "{language_name}",
+    "personaLabel": "One-sentence persona label for this region + audience",
+    "traits": ["Trait 1", "Trait 2", "Trait 3"],
+    "motivations": ["Motivation 1", "Motivation 2"],
+    "painPoints": ["Pain point 1", "Pain point 2"],
+    "purchaseDrivers": ["Driver 1", "Driver 2", "Driver 3"]
+  }},
+  "personaFit": {{
+    "score": <1-10 float, 10=website perfectly matches this persona>,
+    "isFit": <true/false>,
+    "matchingSignals": ["Signals that match persona needs"],
+    "mismatchSignals": ["Signals that do not match persona needs"],
+    "summary": "Concise summary of fit between website and persona"
+  }},
   "inferredProductType": "Brief description of what this website/page is about (e.g., 'Fashion e-commerce', 'SaaS project management tool', 'News portal')",
   "languageQuality": {{
     "score": <1-10 float, 10=perfect native quality>,
@@ -1486,7 +1680,7 @@ IMPORTANT:
 
 
 def analyze_content_with_ai(text_content, url, result, api_base, api_key,
-                            model='gpt-4o', timeout=60):
+                            model='gpt-4o', timeout=60, target_audience=None):
     if not text_content or len(text_content.strip()) < 20:
         return {'error': 'Insufficient text content for AI analysis'}
 
@@ -1503,6 +1697,7 @@ def analyze_content_with_ai(text_content, url, result, api_base, api_key,
         language=language,
         language_name=language_name,
         confidence=confidence,
+        target_audience=(target_audience.strip() if isinstance(target_audience, str) and target_audience.strip() else 'Not provided'),
         content=text_content[:3000],
     )
 
@@ -1519,6 +1714,9 @@ def analyze_content_with_ai(text_content, url, result, api_base, api_key,
 
     try:
         analysis = json.loads(raw_reply)
+        analysis['targetAudience'] = resolve_target_audience(
+            target_audience, result, ai_analysis=analysis
+        )
         return analysis
     except json.JSONDecodeError:
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_reply, re.DOTALL)
@@ -1729,13 +1927,93 @@ def aggregate_ai_analysis(page_ai_results):
     }
 
 
+def aggregate_persona_analysis(page_persona_results):
+    valid = [p for p in page_persona_results if isinstance(p, dict)]
+    if not valid:
+        return None
+
+    fit_scores = []
+    audience_sources = []
+    audience_values = []
+    traits = []
+    matching = []
+    mismatching = []
+
+    for item in valid:
+        audience = item.get('audience', {})
+        persona = item.get('regionalPersona', {})
+        fit = item.get('personaFit', {})
+
+        source = audience.get('source')
+        if source:
+            audience_sources.append(source)
+
+        final_audience = audience.get('finalAudience')
+        if final_audience:
+            audience_values.append(final_audience)
+
+        score = fit.get('score')
+        if isinstance(score, (int, float)):
+            fit_scores.append(float(score))
+
+        traits.extend(persona.get('traits', []))
+        matching.extend(fit.get('matchingSignals', []))
+        mismatching.extend(fit.get('mismatchSignals', []))
+
+    source = (
+        'user_input' if 'user_input' in audience_sources
+        else 'ai_inferred' if 'ai_inferred' in audience_sources
+        else 'rule_based'
+    )
+
+    # Preserve first-seen order while deduping
+    traits = list(dict.fromkeys([t for t in traits if t]))
+    matching = list(dict.fromkeys([m for m in matching if m]))
+    mismatching = list(dict.fromkeys([m for m in mismatching if m]))
+    audience_values = list(dict.fromkeys([a for a in audience_values if a]))
+
+    representative_persona = valid[0].get('regionalPersona', {})
+    avg_score = round(sum(fit_scores) / len(fit_scores), 1) if fit_scores else None
+
+    return {
+        'audience': {
+            'source': source,
+            'userInput': None,
+            'inferredAudience': audience_values[0] if audience_values else None,
+            'finalAudience': audience_values[0] if audience_values else 'Unknown audience',
+        },
+        'regionalPersona': {
+            'regionCode': representative_persona.get('regionCode'),
+            'regionName': representative_persona.get('regionName'),
+            'language': representative_persona.get('language'),
+            'personaLabel': representative_persona.get('personaLabel'),
+            'traits': traits[:10],
+            'motivations': representative_persona.get('motivations', []),
+            'painPoints': representative_persona.get('painPoints', []),
+            'purchaseDrivers': representative_persona.get('purchaseDrivers', []),
+        },
+        'personaFit': {
+            'score': avg_score,
+            'isFit': bool(avg_score is not None and avg_score >= 7),
+            'matchingSignals': matching[:20],
+            'mismatchSignals': mismatching[:20],
+            'summary': (
+                "全站整体较符合目标 persona。"
+                if avg_score is not None and avg_score >= 7
+                else "全站与目标 persona 存在明显差距，建议优先修复关键本地化缺口。"
+            ),
+        },
+    }
+
+
 # ============================================================================
 # Site-Level Analysis Orchestrator
 # ============================================================================
 
 def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
                  nlpcloud_token=None, timeout=15, include_recommendations=True,
-                 ai_api_base=None, ai_api_key=None, ai_model='gpt-4o'):
+                 ai_api_base=None, ai_api_key=None, ai_model='gpt-4o',
+                 target_audience=None):
     output = {
         'url': url,
         'mode': 'site',
@@ -1744,6 +2022,7 @@ def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
         'siteResult': None,
         'siteOptimization': None,
         'aiContentAnalysis': None,
+        'personaAnalysis': None,
         'pages': [],
         'errors': [],
         'warnings': [],
@@ -1784,6 +2063,7 @@ def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
     # 3. Analyze each page
     page_results = []
     page_ai_results = []
+    page_persona_results = []
 
     for i, page in enumerate(crawled):
         page_url = page['final_url']
@@ -1799,6 +2079,7 @@ def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
             'evidence': {},
             'optimization': None,
             'aiContentAnalysis': None,
+            'personaAnalysis': None,
             'errors': [],
             'warnings': [],
         }
@@ -1844,11 +2125,21 @@ def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
             ai_result = analyze_content_with_ai(
                 text_content, page_url, page_output['result'],
                 ai_api_base, ai_api_key, model=ai_model, timeout=timeout,
+                target_audience=target_audience,
             )
             page_output['aiContentAnalysis'] = ai_result
-            page_ai_results.append(ai_result)
+            if isinstance(ai_result, dict) and 'error' not in ai_result:
+                page_ai_results.append(ai_result)
             if isinstance(ai_result, dict) and 'error' in ai_result:
                 page_output['warnings'].append(f"AI analysis: {ai_result['error']}")
+
+        page_output['personaAnalysis'] = compose_persona_analysis(
+            page_output.get('result'),
+            page_output.get('evidence', {}),
+            target_audience=target_audience,
+            ai_analysis=page_output.get('aiContentAnalysis'),
+        )
+        page_persona_results.append(page_output['personaAnalysis'])
 
         page_results.append(page_output)
         output['pages'].append(page_output)
@@ -1861,6 +2152,9 @@ def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
     if page_ai_results:
         output['aiContentAnalysis'] = aggregate_ai_analysis(page_ai_results)
 
+    if page_persona_results:
+        output['personaAnalysis'] = aggregate_persona_analysis(page_persona_results)
+
     print(f"Analysis complete. {len(crawled)} pages analyzed.", file=sys.stderr)
 
     return output
@@ -1872,13 +2166,14 @@ def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
 
 def analyze(url, include_ip_geo=True, nlpcloud_token=None, timeout=15,
             include_recommendations=True, ai_api_base=None, ai_api_key=None,
-            ai_model='gpt-4o'):
+            ai_model='gpt-4o', target_audience=None):
     output = {
         'url': url,
         'mode': 'page',
         'analyzedAt': datetime.now(timezone.utc).isoformat(),
         'result': None,
         'evidence': {},
+        'personaAnalysis': None,
         'errors': [],
         'warnings': [],
     }
@@ -1941,10 +2236,18 @@ def analyze(url, include_ip_geo=True, nlpcloud_token=None, timeout=15,
         ai_result = analyze_content_with_ai(
             text_content, final_url or url, output['result'],
             ai_api_base, ai_api_key, model=ai_model, timeout=timeout,
+            target_audience=target_audience,
         )
         output['aiContentAnalysis'] = ai_result
         if isinstance(ai_result, dict) and 'error' in ai_result:
             output['warnings'].append(f"AI analysis: {ai_result['error']}")
+
+    output['personaAnalysis'] = compose_persona_analysis(
+        output.get('result'),
+        output.get('evidence', {}),
+        target_audience=target_audience,
+        ai_analysis=output.get('aiContentAnalysis'),
+    )
 
     return output
 
@@ -1966,6 +2269,8 @@ def main():
                         help='Output format: json or markdown (default: json)')
     parser.add_argument('--no-recommendations', action='store_true',
                         help='Disable cross-border optimization recommendations')
+    parser.add_argument('--target-audience',
+                        help='Optional target audience input. If omitted, AI (or rule-based fallback) will infer audience before persona fit analysis.')
 
     crawl_group = parser.add_argument_group('multi-page crawling')
     crawl_group.add_argument('--crawl', action='store_true',
@@ -1999,6 +2304,7 @@ def main():
             ai_api_base=args.ai_api_base,
             ai_api_key=args.ai_api_key,
             ai_model=args.ai_model,
+            target_audience=args.target_audience,
         )
     else:
         result = analyze(
@@ -2010,6 +2316,7 @@ def main():
             ai_api_base=args.ai_api_base,
             ai_api_key=args.ai_api_key,
             ai_model=args.ai_model,
+            target_audience=args.target_audience,
         )
 
     # Format output

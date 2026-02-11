@@ -71,6 +71,12 @@ python3 scripts/analyze_webpage.py https://example.com --format markdown
 python3 scripts/analyze_webpage.py https://example.com --format markdown --output report.md
 ```
 
+**Specify Target Audience for Persona Analysis:**
+```bash
+python3 scripts/analyze_webpage.py https://example.com \
+  --target-audience "North America women 25-35 fashion shoppers"
+```
+
 ## Interpreting Results
 
 The script outputs a JSON object. Key fields to look for:

@@ -73,6 +73,21 @@ class MarkdownReportOptimizationTests(unittest.TestCase):
                     }
                 ],
             },
+            "personaAnalysis": {
+                "audience": {
+                    "source": "user_input",
+                    "finalAudience": "US young professionals",
+                },
+                "regionalPersona": {
+                    "regionName": "United States",
+                    "traits": ["Price-sensitive", "Mobile-first"],
+                },
+                "personaFit": {
+                    "score": 7.6,
+                    "isFit": True,
+                    "summary": "网站整体较符合该人群预期。",
+                },
+            },
         }
 
         report = markdown_report.generate_markdown_report(sample)
@@ -80,6 +95,7 @@ class MarkdownReportOptimizationTests(unittest.TestCase):
         self.assertIn("## 🧭 执行摘要", report)
         self.assertIn("## ✅ 建议优先处理", report)
         self.assertIn("关键问题 1 项", report)
+        self.assertIn("## 👥 Persona 匹配分析", report)
 
 
 if __name__ == "__main__":

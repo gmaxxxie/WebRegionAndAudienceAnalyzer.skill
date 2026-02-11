@@ -97,6 +97,7 @@ python3 scripts/analyze_webpage.py https://www.example.com
 | `--ai-api-base URL` | OpenAI 兼容 API 地址（或使用 `AI_API_BASE` 环境变量） | 无 |
 | `--ai-api-key KEY` | API 密钥（或使用 `AI_API_KEY` 环境变量） | 无 |
 | `--ai-model MODEL` | AI 模型名称 | gpt-4o |
+| `--target-audience TEXT` | 手动指定目标人群（不填则由 AI/规则自动识别） | 无 |
 
 ### 使用示例
 
@@ -115,6 +116,12 @@ python3 scripts/analyze_webpage.py https://www.shein.com --crawl
 python3 scripts/analyze_webpage.py https://www.shein.com --crawl \
   --ai-api-base https://api.openai.com/v1 \
   --ai-api-key YOUR_API_KEY
+```
+
+**手动指定目标人群并做 persona 匹配分析：**
+```bash
+python3 scripts/analyze_webpage.py https://example.com --crawl \
+  --target-audience "北美 25-35 岁女性快时尚用户"
 ```
 
 **使用环境变量配置 AI：**
@@ -241,6 +248,21 @@ python3 scripts/analyze_webpage.py https://www.yahoo.co.jp --no-ip-geo
       "Consider adding more local payment methods like PayPay",
       "Include references to Japanese fashion trends"
     ]
+  },
+  "personaAnalysis": {                // 人群画像与网站匹配度分析（始终输出，优先用 AI）
+    "audience": {
+      "source": "user_input | ai_inferred | rule_based",
+      "finalAudience": "北美 25-35 岁女性快时尚用户"
+    },
+    "regionalPersona": {
+      "personaLabel": "US price-sensitive mobile-first fashion shopper",
+      "traits": ["Price-sensitive", "Mobile-first", "Trend-driven"]
+    },
+    "personaFit": {
+      "score": 7.6,                   // 1-10 分
+      "isFit": true,
+      "summary": "网站整体较符合该人群预期。"
+    }
   }
 }
 ```
@@ -271,6 +293,11 @@ python3 scripts/analyze_webpage.py https://www.yahoo.co.jp --no-ip-geo
 4. **改进建议** (suggestions)
    - 可操作的本地化质量改进建议
    - 针对目标市场的具体优化方向
+
+5. **Persona 匹配分析** (personaAnalysis)
+   - 先确定目标人群（用户输入优先，否则 AI 推断）
+   - 按目标地区生成人群 persona（特征、动机、痛点、购买驱动）
+   - 评估网站与该 persona 的匹配度（score / isFit / summary）
 
 ### 支持的 API
 
@@ -316,6 +343,7 @@ python3 scripts/analyze_webpage.py https://example.com \
 - **siteResult**: 全站地区/语言判断（综合所有页面信号）
 - **siteOptimization**: 全站优化建议（聚合所有页面问题）
 - **aiContentAnalysis**: AI 分析聚合（平均分数 + 综合建议）
+- **personaAnalysis**: 全站人群画像与匹配度聚合结果
 - **pages[]**: 每个页面的详细分析结果
 
 ### 使用场景
