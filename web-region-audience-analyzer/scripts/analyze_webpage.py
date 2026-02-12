@@ -2277,8 +2277,8 @@ def main():
                              help='Enable multi-page site crawling mode')
     crawl_group.add_argument('--max-depth', type=int, default=3,
                              help='Maximum crawl depth (default: 3)')
-    crawl_group.add_argument('--max-pages', type=int, default=20,
-                             help='Maximum pages to crawl (default: 20)')
+    crawl_group.add_argument('--max-pages', type=int, default=50,
+                             help='Maximum pages to crawl (default: 50)')
 
     ai_group = parser.add_argument_group('AI content analysis')
     ai_group.add_argument('--ai-api-base',
