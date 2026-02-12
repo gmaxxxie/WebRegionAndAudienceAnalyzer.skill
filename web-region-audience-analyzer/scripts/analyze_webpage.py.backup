@@ -2007,44 +2007,6 @@ def aggregate_persona_analysis(page_persona_results):
 
 
 # ============================================================================
-# Persona-Driven Analysis Context
-# ============================================================================
-
-def create_persona_context(target_audience_result):
-    """Create a structured persona context for analysis focus."""
-    if not target_audience_result:
-        return None
-    
-    source = target_audience_result.get('source', 'rule_based')
-    final_audience = target_audience_result.get('finalAudience', '')
-    
-    # Define persona characteristics based on audience
-    persona_focus = {
-        'price_sensitive': False,
-        'mobile_first': False,
-        'local_trust': False,
-    }
-    
-    # Detect focus areas based on audience keywords
-    audience_lower = final_audience.lower() if final_audience else ''
-    
-    if any(kw in audience_lower for kw in ['价格', '便宜', '优惠', 'discount', 'save', 'value', '性价比']):
-        persona_focus['price_sensitive'] = True
-    
-    if any(kw in audience_lower for kw in ['手机', '移动', 'mobile', 'app', '快速', 'quick']):
-        persona_focus['mobile_first'] = True
-    
-    if any(kw in audience_lower for kw in ['本地', '当地', '信任', 'review', '评价', '保障']):
-        persona_focus['local_trust'] = True
-    
-    return {
-        'source': source,
-        'finalAudience': final_audience,
-        'focusAreas': persona_focus,
-    }
-
-
-# ============================================================================
 # Site-Level Analysis Orchestrator
 # ============================================================================
 
@@ -2065,35 +2027,6 @@ def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
         'errors': [],
         'warnings': [],
     }
-
-    # 0. Resolve target audience FIRST (Persona-driven approach)
-    print("Resolving target audience...", file=sys.stderr)
-    initial_result = None
-    if include_ip_geo:
-        domain = urllib.parse.urlparse(url).netloc
-        shared_ip_geo = get_ip_geo(domain)
-        if 'error' not in shared_ip_geo:
-            initial_result = {
-                'primaryRegion': shared_ip_geo.get('countryCode'),
-                'primaryRegionName': shared_ip_geo.get('country'),
-                'primaryLanguage': 'en',  # Default assumption
-                'primaryLanguageName': 'English',
-                'likelyAudience': 'Unknown audience',
-            }
-    
-    target_audience_result = resolve_target_audience(
-        target_audience,
-        initial_result
-    )
-    
-    persona_context = create_persona_context(target_audience_result)
-    
-    if persona_context:
-        print(f"Target audience: {persona_context['finalAudience']} (source: {persona_context['source']})", file=sys.stderr)
-        focus_areas = persona_context.get('focusAreas', {})
-        if any(focus_areas.values()):
-            focus_list = [k for k, v in focus_areas.items() if v]
-            print(f"Persona focus areas: {', '.join(focus_list)}", file=sys.stderr)
 
     # 1. Crawl
     def _progress(count, page_url):
@@ -2244,35 +2177,6 @@ def analyze(url, include_ip_geo=True, nlpcloud_token=None, timeout=15,
         'errors': [],
         'warnings': [],
     }
-
-    # 0. Resolve target audience FIRST (Persona-driven approach)
-    print("Resolving target audience...", file=sys.stderr)
-    initial_result = None
-    if include_ip_geo:
-        domain = urllib.parse.urlparse(url).netloc
-        geo = get_ip_geo(domain)
-        if 'error' not in geo:
-            initial_result = {
-                'primaryRegion': geo.get('countryCode'),
-                'primaryRegionName': geo.get('country'),
-                'primaryLanguage': 'en',  # Default assumption
-                'primaryLanguageName': 'English',
-                'likelyAudience': 'Unknown audience',
-            }
-    
-    target_audience_result = resolve_target_audience(
-        target_audience,
-        initial_result
-    )
-    
-    persona_context = create_persona_context(target_audience_result)
-    
-    if persona_context:
-        print(f"Target audience: {persona_context['finalAudience']} (source: {persona_context['source']})", file=sys.stderr)
-        focus_areas = persona_context.get('focusAreas', {})
-        if any(focus_areas.values()):
-            focus_list = [k for k, v in focus_areas.items() if v]
-            print(f"Persona focus areas: {', '.join(focus_list)}", file=sys.stderr)
 
     # 1. Fetch HTML
     html, final_url, fetch_err = fetch_html(url, timeout)
