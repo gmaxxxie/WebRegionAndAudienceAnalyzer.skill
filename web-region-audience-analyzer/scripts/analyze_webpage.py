@@ -402,6 +402,99 @@ def _extract_ux_signals(html):
     return signals
 
 
+def extract_persona_enhanced_signals(html, text_content, persona_focus):
+    """Extract persona-focused enhanced signals based on focus areas.
+    
+    Args:
+        html: HTML content
+        text_content: Extracted text content
+        persona_focus: Dictionary of focus areas (price_sensitive, mobile_first, local_trust)
+    
+    Returns:
+        Dictionary of enhanced signals
+    """
+    enhanced = {}
+    
+    # Price-sensitive signals
+    if persona_focus.get('price_sensitive'):
+        # Detect pricing structure
+        price_patterns = [
+            (r'price[-_]?display|original[-_]?price|list[-_]?price', 'pricing_display'),
+            (r'\$\d+\.?\d*', 'price_format'),
+            (r'was|was[: ]+\$|from[: ]+\$|regular[- ]?price', 'original_price'),
+            (r'sale|discount|off|save|-\d+%|\d+[%] off', 'discount_display'),
+            (r'best[- ]?price|lowest[- ]?price', 'price_comparison'),
+            (r'\$\d+\.?\d*\s*USD|\$\d+\.?\d*\s*CAD', 'currency_display'),
+        ]
+        
+        pricing_info = {}
+        for pattern, key in price_patterns:
+            if re.search(pattern, html, re.IGNORECASE):
+                pricing_info[key] = True
+            else:
+                pricing_info[key] = False
+        
+        enhanced['pricing'] = pricing_info
+        
+        # Check for value proposition
+        value_keywords = ['value', 'save', 'deal', 'bundle', 'pack', 'combo', 'best value']
+        enhanced['value_proposition'] = any(kw in text_content.lower() for kw in value_keywords)
+    
+    # Mobile-first signals
+    if persona_focus.get('mobile_first'):
+        # Check viewport
+        viewport = re.search(r'<meta[^>]*name=["\']viewport["\']([^"\']*)', html, re.IGNORECASE)
+        enhanced['viewport_configured'] = bool(viewport)
+        
+        if viewport:
+            vp_content = viewport.group(1).lower()
+            enhanced['viewport_mobile_optimized'] = all([
+                'width=device-width' in vp_content,
+                'initial-scale=1' in vp_content,
+            ])
+        
+        # Check for touch-optimized elements
+        enhanced['has_touch_elements'] = bool(re.search(
+            r'(<button|<a[^>]*href)', html, re.IGNORECASE
+        ))
+        
+        # Check for mobile-specific CSS classes
+        mobile_classes = ['mobile-', 'touch-', 'responsive-', 'xs-', 'sm-']
+        enhanced['has_mobile_classes'] = any(
+            cls in html for cls in mobile_classes
+        )
+    
+    # Local trust signals
+    if persona_focus.get('local_trust'):
+        # Check for local reviews
+        enhanced['has_local_reviews'] = bool(re.search(
+            r'review|rating|testimonial|star|verified|badge', 
+            html, re.IGNORECASE
+        ))
+        
+        # Check for trust signals
+        trust_signals = [
+            (r'secure|ssl|https|locked|shield', 'security_badges'),
+            (r'guarantee|warranty|refund|policy', 'guarantee_display'),
+            (r'certified|accredited|verified|trusted', 'trust_badges'),
+            (r'shipping|delivery|fulfillment', 'shipping_info'),
+        ]
+        
+        trust_info = {}
+        for pattern, key in trust_signals:
+            trust_info[key] = bool(re.search(pattern, html, re.IGNORECASE))
+        
+        enhanced['trust_signals'] = trust_info
+        
+        # Check for local-specific content
+        local_keywords = ['canadian', 'canada', 'local', 'domestic']
+        enhanced['has_local_content'] = any(
+            kw in text_content.lower() for kw in local_keywords
+        )
+    
+    return enhanced
+
+
 def extract_signals(html, url):
     """Extract all signals from HTML content."""
     if HAS_BS4:
@@ -492,6 +585,7 @@ def extract_signals(html, url):
         'spellingCounts': spelling_counts,
         'unitCounts': unit_counts,
         'uxSignals': ux_signals,
+        'enhanced': {},  # Placeholder for persona-driven enhancements
     }
 
     return {'htmlSignals': html_signals, 'contentSignals': content_signals}, text_content
