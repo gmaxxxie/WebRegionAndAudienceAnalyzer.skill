@@ -98,6 +98,29 @@
 - ✅ **分析有针对性** - 不再盲目收集所有信号，而是根据 Persona 优先收集相关信号
 - ✅ **评估更准确** - 评估标准基于实际的用户画像，而非通用的 SEO 规则
 - ✅ **建议更实用** - 生成的优化建议直接针对特定人群的痛点
+- ✅ **支持多维度 Persona** - 价格敏感、移动端优先、本地信任等多个关注点
+
+### 技术实现
+
+```python
+# Persona 驱动的信号收集
+persona_focus = {
+    'price_sensitive': True,  # 价格敏感用户
+    'mobile_first': True,      # 移动端优先用户
+    'local_trust': True,      # 本地信任关注用户
+}
+
+enhanced_signals = extract_persona_enhanced_signals(
+    html, text_content, persona_focus
+)
+
+# 输出增强信号
+{
+    'pricing': {'pricing_display': True, 'discount_display': True},
+    'viewport_mobile_optimized': True,
+    'trust_signals': {'security_badges': True}
+}
+```
 
 ## 安装
 

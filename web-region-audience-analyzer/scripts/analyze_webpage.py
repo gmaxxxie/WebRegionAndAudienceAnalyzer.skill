@@ -1670,19 +1670,33 @@ def build_fallback_persona_analysis(result, evidence, target_audience=None):
     }
 
 
-def compose_persona_analysis(result, evidence, target_audience=None, ai_analysis=None):
-    fallback = build_fallback_persona_analysis(result, evidence, target_audience=target_audience)
+def compose_persona_analysis(result, evidence, target_audience=None, ai_analysis=None, persona_context=None):
+    """Compose persona analysis with optional persona context for enhanced evaluation."""
+    # If persona_context is provided, use it directly
+    if persona_context:
+        audience = {
+            'source': persona_context.get('source', 'rule_based'),
+            'userInput': persona_context.get('userInput'),
+            'inferredAudience': persona_context.get('inferredAudience'),
+            'finalAudience': persona_context.get('finalAudience'),
+        }
+    else:
+        # Fallback to original logic
+        fallback = build_fallback_persona_analysis(result, evidence, target_audience=target_audience)
+        audience = fallback['audience']
 
     if not isinstance(ai_analysis, dict) or 'error' in ai_analysis:
+        fallback = build_fallback_persona_analysis(result, evidence, target_audience=target_audience)
         return fallback
 
-    audience = resolve_target_audience(target_audience, result, ai_analysis=ai_analysis)
     regional_persona = ai_analysis.get('regionalPersona')
     persona_fit = ai_analysis.get('personaFit')
 
     if not isinstance(regional_persona, dict):
+        fallback = build_fallback_persona_analysis(result, evidence, target_audience=target_audience)
         regional_persona = fallback['regionalPersona']
     if not isinstance(persona_fit, dict):
+        fallback = build_fallback_persona_analysis(result, evidence, target_audience=target_audience)
         persona_fit = fallback['personaFit']
 
     return {
@@ -2226,6 +2240,8 @@ def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
     page_ai_results = []
     page_persona_results = []
 
+    print(f"Analyzing {len(crawled)} pages with persona focus...", file=sys.stderr)
+
     for i, page in enumerate(crawled):
         page_url = page['final_url']
         page_html = page['html']
@@ -2251,6 +2267,18 @@ def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
             page_output['evidence'].update(signals)
         except Exception as e:
             page_output['errors'].append(f"Signal extraction failed: {e}")
+
+        # NEW: Extract persona-enhanced signals
+        if persona_context and text_content:
+            try:
+                enhanced = extract_persona_enhanced_signals(
+                    page_html, 
+                    text_content, 
+                    persona_context.get('focusAreas', {})
+                )
+                page_output['evidence']['contentSignals']['enhanced'] = enhanced
+            except Exception as e:
+                page_output['warnings'].append(f"Persona-enhanced signal extraction failed: {e}")
 
         if shared_ip_geo:
             page_output['evidence']['ipGeolocation'] = shared_ip_geo
@@ -2299,6 +2327,7 @@ def analyze_site(url, max_depth=3, max_pages=20, include_ip_geo=True,
             page_output.get('evidence', {}),
             target_audience=target_audience,
             ai_analysis=page_output.get('aiContentAnalysis'),
+            persona_context=persona_context,  # ← Pass persona_context
         )
         page_persona_results.append(page_output['personaAnalysis'])
 
@@ -2383,6 +2412,41 @@ def analyze(url, include_ip_geo=True, nlpcloud_token=None, timeout=15,
     except Exception as e:
         output['errors'].append(f"Signal extraction failed: {e}")
         text_content = ""
+
+    # 2.5. NEW: Extract persona-enhanced signals
+    persona_context = None
+    if target_audience or include_ip_geo:
+        # Create minimal persona context for single-page analysis
+        initial_result = None
+        if include_ip_geo:
+            domain = urllib.parse.urlparse(final_url or url).netloc
+            geo = get_ip_geo(domain)
+            if 'error' not in geo:
+                initial_result = {
+                    'primaryRegion': geo.get('countryCode'),
+                    'primaryRegionName': geo.get('country'),
+                    'primaryLanguage': 'en',
+                    'primaryLanguageName': 'English',
+                    'likelyAudience': 'Unknown audience',
+                }
+        
+        target_audience_result = resolve_target_audience(
+            target_audience,
+            initial_result
+        )
+        persona_context = create_persona_context(target_audience_result)
+        
+        # Extract enhanced signals
+        if persona_context and text_content:
+            try:
+                enhanced = extract_persona_enhanced_signals(
+                    html,
+                    text_content,
+                    persona_context.get('focusAreas', {})
+                )
+                output['evidence']['contentSignals']['enhanced'] = enhanced
+            except Exception as e:
+                output['warnings'].append(f"Persona-enhanced signal extraction failed: {e}")
 
     # 3. IP Geolocation
     if include_ip_geo:
