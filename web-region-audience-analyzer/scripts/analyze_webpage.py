@@ -2519,8 +2519,8 @@ def main():
                         help='HTTP request timeout in seconds')
     parser.add_argument('--output', '-o',
                         help='Output file path (default: stdout; markdown defaults to Downloads)')
-    parser.add_argument('--format', choices=['json', 'markdown'], default='json',
-                        help='Output format: json or markdown (default: json)')
+    parser.add_argument('--format', choices=['json', 'markdown', 'friendly'], default='json',
+                        help='Output format: json, markdown, or friendly (default: json)')
     parser.add_argument('--no-recommendations', action='store_true',
                         help='Disable cross-border optimization recommendations')
     parser.add_argument('--target-audience',
@@ -2575,7 +2575,7 @@ def main():
         )
 
     # Format output
-    if args.format == 'markdown':
+    if args.format in ['markdown', 'friendly']:
         # Import markdown generator
         import subprocess
         import tempfile
@@ -2587,7 +2587,10 @@ def main():
 
         # Generate markdown
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        md_script = os.path.join(script_dir, 'generate_markdown_report.py')
+        if args.format == 'friendly':
+            md_script = os.path.join(script_dir, 'generate_user_friendly_report.py')
+        else:
+            md_script = os.path.join(script_dir, 'generate_markdown_report.py')
 
         try:
             md_output = subprocess.check_output(
@@ -2605,7 +2608,7 @@ def main():
         out = json.dumps(result, indent=2, ensure_ascii=False)
 
     output_path = args.output
-    if args.format == 'markdown' and not output_path:
+    if args.format in ['markdown', 'friendly'] and not output_path:
         if build_default_markdown_output_path:
             output_path = build_default_markdown_output_path(args.url)
         else:
@@ -2618,7 +2621,9 @@ def main():
             os.makedirs(output_dir, exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(out)
-        if args.format == 'markdown':
+        if args.format == 'friendly':
+            print(f"📋 用户友好报告已保存至: {output_path}")
+        else:
             print(f"Markdown report saved to: {output_path}")
     else:
         print(out)
