@@ -86,7 +86,7 @@ python3 scripts/analyze_webpage.py https://www.example.com
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--crawl` | 启用多页面站点爬取模式 | 禁用 |
+| `--no-crawl` | 禁用多页面站点爬取，仅分析单页 | 禁用（即默认启用爬取）|
 | `--max-depth N` | 最大爬取深度 | 3 |
 | `--max-pages N` | 最大爬取页面数 | 50 |
 
@@ -101,26 +101,26 @@ python3 scripts/analyze_webpage.py https://www.example.com
 
 ### 使用示例
 
-**分析单个页面：**
+**分析整个站点（默认多页面爬取）：**
 ```bash
 python3 scripts/analyze_webpage.py https://www.shein.com
 ```
 
-**分析整个站点（多页面爬取）：**
+**仅分析单个页面：**
 ```bash
-python3 scripts/analyze_webpage.py https://www.shein.com --crawl
+python3 scripts/analyze_webpage.py https://www.shein.com --no-crawl
 ```
 
 **多页面爬取 + AI 内容分析（推荐）：**
 ```bash
-python3 scripts/analyze_webpage.py https://www.shein.com --crawl \
+python3 scripts/analyze_webpage.py https://www.shein.com \
   --ai-api-base https://api.openai.com/v1 \
   --ai-api-key YOUR_API_KEY
 ```
 
 **手动指定目标人群并做 persona 匹配分析：**
 ```bash
-python3 scripts/analyze_webpage.py https://example.com --crawl \
+python3 scripts/analyze_webpage.py https://example.com \
   --target-audience "北美 25-35 岁女性快时尚用户"
 ```
 
@@ -133,7 +133,7 @@ python3 scripts/analyze_webpage.py https://www.shein.com --crawl
 
 **自定义爬取参数：**
 ```bash
-python3 scripts/analyze_webpage.py https://example.com --crawl \
+python3 scripts/analyze_webpage.py https://example.com \
   --max-depth 2 --max-pages 10 -o analysis.json
 ```
 
@@ -309,14 +309,14 @@ python3 scripts/analyze_webpage.py https://www.yahoo.co.jp --no-ip-geo
 
 ```bash
 # 使用 OpenAI
-python3 scripts/analyze_webpage.py https://example.com --crawl \
+python3 scripts/analyze_webpage.py https://example.com \
   --ai-api-base https://api.openai.com/v1 \
   --ai-api-key sk-your-key
 
 # 使用环境变量
 export AI_API_BASE=https://api.openai.com/v1
 export AI_API_KEY=sk-your-key
-python3 scripts/analyze_webpage.py https://example.com --crawl
+python3 scripts/analyze_webpage.py https://example.com
 
 # 指定模型
 python3 scripts/analyze_webpage.py https://example.com \

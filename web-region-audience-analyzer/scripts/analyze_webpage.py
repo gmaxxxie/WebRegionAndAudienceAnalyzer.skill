@@ -2273,8 +2273,8 @@ def main():
                         help='Optional target audience input. If omitted, AI (or rule-based fallback) will infer audience before persona fit analysis.')
 
     crawl_group = parser.add_argument_group('multi-page crawling')
-    crawl_group.add_argument('--crawl', action='store_true',
-                             help='Enable multi-page site crawling mode')
+    crawl_group.add_argument('--no-crawl', action='store_true',
+                             help='Disable multi-page site crawling (analyze single page only)')
     crawl_group.add_argument('--max-depth', type=int, default=3,
                              help='Maximum crawl depth (default: 3)')
     crawl_group.add_argument('--max-pages', type=int, default=50,
@@ -2292,7 +2292,8 @@ def main():
 
     args = parser.parse_args()
 
-    if args.crawl:
+    # Default to multi-page crawling mode
+    if not args.no_crawl:
         result = analyze_site(
             args.url,
             max_depth=args.max_depth,
