@@ -1,0 +1,6 @@
+# Core dependencies (optional but recommended for best results)
+beautifulsoup4>=4.12.0
+langdetect>=1.0.9
+
+# Development dependencies
+pytest>=7.0.0
